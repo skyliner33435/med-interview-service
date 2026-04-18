@@ -19,6 +19,7 @@ type AuthLike = {
 
 export type SupabaseBrowserClientLike = {
   auth: AuthLike;
+  from: (table: string) => any;
 };
 
 let browserClient: SupabaseBrowserClientLike | null = null;
@@ -28,6 +29,21 @@ function createStubClient(): SupabaseBrowserClientLike {
     "Supabase env is missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
   );
   const subscription = { unsubscribe: () => {} };
+
+  const builder: any = new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (prop === "then") {
+          // Allow: await supabase.from(...).select(...).eq(...).order(...)
+          return (resolve: (v: any) => void) =>
+            resolve({ data: null, error: missingEnvError });
+        }
+        return () => builder;
+      },
+    }
+  );
+
   return {
     auth: {
       getSession: async () => ({ data: { session: null } }),
@@ -37,6 +53,7 @@ function createStubClient(): SupabaseBrowserClientLike {
       getUser: async () => ({ data: { user: null } }),
       signOut: async () => ({ error: missingEnvError }),
     },
+    from: () => builder,
   };
 }
 

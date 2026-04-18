@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import {
-  seedReports,
   seedUniversities,
   seedUsers,
-  type AdminReport,
   type AdminUniversity,
   type AdminUser,
 } from "./adminSampleData";
@@ -65,7 +63,22 @@ export function AdminClient() {
   const [user, setUser] = useState<User | null>(null);
   const [tab, setTab] = useState<TabKey>("reports");
 
-  const [reports, setReports] = useState<AdminReport[]>(seedReports);
+  const [reports, setReports] = useState<
+    {
+      id: string;
+      created_at: string;
+      university_name: string;
+      year: number;
+      format: string;
+      atmosphere: string | null;
+      score: string | null;
+      improvement: string | null;
+      status: "pending" | "published" | "rejected";
+      submitted_by: string | null;
+    }[]
+  >([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState<string | null>(null);
   const [universities, setUniversities] =
     useState<AdminUniversity[]>(seedUniversities);
   const [users] = useState<AdminUser[]>(seedUsers);
@@ -100,6 +113,35 @@ export function AdminClient() {
       router.replace("/");
     }
   }, [allowed, booting, router, user]);
+
+  async function loadPendingReports() {
+    setReportsError(null);
+    setReportsLoading(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from("reports")
+        .select(
+          "id, created_at, university_name, year, format, atmosphere, score, improvement, status, submitted_by"
+        )
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setReports((data ?? []) as any);
+    } catch (err) {
+      setReportsError(
+        err instanceof Error ? err.message : "レポート取得に失敗しました。"
+      );
+    } finally {
+      setReportsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (booting || !user || !allowed) return;
+    loadPendingReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booting, user?.id, allowed]);
 
   if (booting) {
     return (
@@ -162,33 +204,39 @@ export function AdminClient() {
 
       {tab === "reports" ? (
         <section className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            {(
-              [
-                ["pending", "承認待ち"],
-                ["approved", "承認済み"],
-                ["rejected", "却下"],
-              ] as const
-            ).map(([k, label]) => (
-              <div
-                key={k}
-                className="rounded-3xl bg-[color:var(--color-card)] p-5 ring-1 ring-white/10"
-              >
-                <div className="text-xs text-[color:var(--color-muted)]">
-                  {label}
+          <div className="grid gap-5">
+            <div className="rounded-3xl bg-[color:var(--color-card)] p-5 ring-1 ring-white/10 md:p-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="text-lg font-semibold tracking-tight">
+                    承認待ちレポート
+                  </div>
+                  <div className="mt-2 text-sm text-[color:var(--color-muted)]">
+                    status が pending のものだけを表示しています。
+                  </div>
                 </div>
-                <div className="mt-2 text-2xl font-semibold tracking-tight">
-                  {reports.filter((r) => r.status === k).length}
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-[color:var(--color-muted)]">
+                    {reports.length} 件
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadPendingReports}
+                    disabled={reportsLoading}
+                    className="inline-flex h-10 items-center justify-center rounded-full border border-white/15 bg-white/5 px-4 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10 disabled:opacity-60"
+                  >
+                    {reportsLoading ? "更新中…" : "更新"}
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
+              {reportsError ? (
+                <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                  {reportsError}
+                </div>
+              ) : null}
+            </div>
 
-          <div className="grid gap-5">
-            {reports
-              .slice()
-              .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-              .map((r) => (
+            {reports.map((r) => (
                 <div
                   key={r.id}
                   className="rounded-3xl bg-[color:var(--color-card)] p-6 ring-1 ring-white/10"
@@ -196,26 +244,27 @@ export function AdminClient() {
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div>
                       <div className="text-lg font-semibold tracking-tight">
-                        {r.university}（{r.year}）
+                        {r.university_name}（{r.year}）
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-[color:var(--color-muted)]">
-                        <Pill>{r.interviewFormat}</Pill>
-                        <Pill>投稿日 {r.createdAt}</Pill>
+                        <Pill>{r.format}</Pill>
+                        <Pill>投稿日 {new Date(r.created_at).toLocaleString()}</Pill>
                         <span className="rounded-full bg-[color:var(--color-accent)]/15 px-3 py-1 font-semibold text-[color:var(--color-accent)] ring-1 ring-[color:var(--color-accent)]/25">
-                          {r.status === "pending"
-                            ? "承認待ち"
-                            : r.status === "approved"
-                              ? "承認済み"
-                              : "却下"}
+                          承認待ち
                         </span>
                       </div>
 
                       <div className="mt-4 text-sm leading-7 text-[color:var(--color-foreground)]">
-                        {r.atmosphere}
+                        {r.atmosphere ?? "（雰囲気の記載なし）"}
                       </div>
-                      {r.scoreDisclosure ? (
+                      {r.score ? (
                         <div className="mt-2 text-xs text-[color:var(--color-muted)]">
-                          開示点数: {r.scoreDisclosure}
+                          開示点数: {r.score}
+                        </div>
+                      ) : null}
+                      {r.improvement ? (
+                        <div className="mt-3 text-xs leading-6 text-[color:var(--color-muted)]">
+                          改善点: {r.improvement}
                         </div>
                       ) : null}
                     </div>
@@ -223,26 +272,36 @@ export function AdminClient() {
                     <div className="flex shrink-0 flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() =>
-                          setReports((xs) =>
-                            xs.map((x) =>
-                              x.id === r.id ? { ...x, status: "approved" } : x
-                            )
-                          )
-                        }
+                        onClick={async () => {
+                          const supabase = getSupabaseBrowserClient();
+                          const { error } = await supabase
+                            .from("reports")
+                            .update({ status: "published" })
+                            .eq("id", r.id);
+                          if (error) {
+                            alert(error.message);
+                            return;
+                          }
+                          setReports((xs) => xs.filter((x) => x.id !== r.id));
+                        }}
                         className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-5 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)]"
                       >
                         承認
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          setReports((xs) =>
-                            xs.map((x) =>
-                              x.id === r.id ? { ...x, status: "rejected" } : x
-                            )
-                          )
-                        }
+                        onClick={async () => {
+                          const supabase = getSupabaseBrowserClient();
+                          const { error } = await supabase
+                            .from("reports")
+                            .update({ status: "rejected" })
+                            .eq("id", r.id);
+                          if (error) {
+                            alert(error.message);
+                            return;
+                          }
+                          setReports((xs) => xs.filter((x) => x.id !== r.id));
+                        }}
                         className="inline-flex h-11 items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10"
                       >
                         却下

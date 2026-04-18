@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { sampleReports } from "../lib/sampleData";
 
 type InterviewFormat =
@@ -23,6 +27,7 @@ function unique<T>(items: T[]) {
 }
 
 export function SubmitClient() {
+  const router = useRouter();
   const universities = useMemo(() => {
     const xs = unique(sampleReports.map((r) => r.university));
     xs.sort((a, b) => a.localeCompare(b, "ja"));
@@ -40,22 +45,92 @@ export function SubmitClient() {
   const [qa, setQa] = useState("");
   const [atmosphere, setAtmosphere] = useState("");
   const [scoreDisclosure, setScoreDisclosure] = useState("");
+  const [improvement, setImprovement] = useState("");
   const [sending, setSending] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [booting, setBooting] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setUser((data.user as User | null) ?? null);
+      setBooting(false);
+    });
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setError(null);
     setSending(true);
     try {
-      await new Promise((r) => setTimeout(r, 500));
-      alert(
-        `（デモ）投稿を受け付けました。\n\n大学: ${university}\n年度: ${year}\n形式: ${format}\n開示点数: ${scoreDisclosure || "未入力"}`
-      );
+      const supabase = getSupabaseBrowserClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUser = (userData.user as User | null) ?? null;
+
+      if (!currentUser) {
+        router.replace("/login");
+        return;
+      }
+
+      const payload = {
+        university_name: university,
+        year: Number(year),
+        format,
+        content: qa,
+        atmosphere,
+        score: scoreDisclosure || null,
+        improvement: improvement || null,
+        status: "pending",
+        submitted_by: currentUser.id,
+      };
+
+      const { error: insertError } = await supabase.from("reports").insert(payload);
+      if (insertError) throw insertError;
+
+      alert("投稿を受け付けました。承認後に公開されます。");
       setQa("");
       setAtmosphere("");
       setScoreDisclosure("");
+      setImprovement("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "投稿に失敗しました。");
     } finally {
       setSending(false);
     }
+  }
+
+  if (booting) {
+    return (
+      <div className="rounded-3xl bg-[color:var(--color-card)] p-6 ring-1 ring-white/10">
+        <div className="h-5 w-48 rounded bg-white/5" />
+        <div className="mt-3 h-4 w-72 rounded bg-white/5" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="rounded-3xl bg-[color:var(--color-card)] p-6 ring-1 ring-white/10">
+        <div className="text-sm text-[color:var(--color-muted)]">
+          レポート投稿はログインが必要です。
+        </div>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+          <Link
+            href="/login"
+            className="inline-flex h-12 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-6 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)]"
+          >
+            ログインへ
+          </Link>
+          <Link
+            href="/signup"
+            className="inline-flex h-12 items-center justify-center rounded-full border border-white/15 bg-white/5 px-6 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10"
+          >
+            無料登録
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -150,6 +225,19 @@ export function SubmitClient() {
       <div className="rounded-3xl bg-[color:var(--color-card)] p-6 ring-1 ring-white/10">
         <label className="block">
           <div className="text-xs font-semibold tracking-tight text-[color:var(--color-muted)]">
+            改善点・振り返り（任意）
+          </div>
+          <textarea
+            value={improvement}
+            onChange={(e) => setImprovement(e.target.value)}
+            placeholder="例）結論→根拠→具体例の型を徹底し、大学別の志望理由を強化する。"
+            rows={4}
+            className="mt-2 w-full resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-7 outline-none transition placeholder:text-white/35 focus:border-[color:var(--color-accent)]/60"
+          />
+        </label>
+
+        <label className="block">
+          <div className="text-xs font-semibold tracking-tight text-[color:var(--color-muted)]">
             開示点数（任意）
           </div>
           <input
@@ -160,10 +248,15 @@ export function SubmitClient() {
           />
         </label>
 
+        {error ? (
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            {error}
+          </div>
+        ) : null}
+
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-xs leading-6 text-[color:var(--color-muted)]">
-            ※ ここではデモとして送信結果をアラート表示します。実運用ではログイン必須・
-            モデレーション・保存（DB）を追加します。
+            ※ 投稿は承認待ち（pending）として保存されます。承認後に公開されます。
           </div>
           <button
             type="submit"
