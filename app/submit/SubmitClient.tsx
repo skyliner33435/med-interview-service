@@ -87,12 +87,23 @@ export function SubmitClient() {
 
       const { error: insertError } = await supabase.from("reports").insert(payload);
       if (insertError) {
+        // Log details to the browser console for debugging RLS issues.
+        console.error("[reports.insert] failed", {
+          insertError,
+          message: (insertError as any)?.message,
+          details: (insertError as any)?.details,
+          hint: (insertError as any)?.hint,
+          code: (insertError as any)?.code,
+          payload,
+          currentUser: { id: currentUser.id, email: currentUser.email },
+        });
+
         const msg = insertError.message || "insert failed";
-        const hint =
+        const rlsHint =
           msg.includes("row-level security") || msg.includes("permission")
             ? "（RLS/権限設定を確認してください）"
             : "";
-        throw new Error(`${msg}${hint ? " " + hint : ""}`);
+        throw new Error(`${msg}${rlsHint ? " " + rlsHint : ""}`);
       }
 
       alert("投稿を受け付けました。承認後に公開されます。");
