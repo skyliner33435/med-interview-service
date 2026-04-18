@@ -11,7 +11,6 @@ export function SignupClient() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,8 +25,8 @@ export function SignupClient() {
       if (signUpError) throw signUpError;
 
       // Email confirmation may be required depending on Supabase settings.
-      setDone(true);
-      router.replace("/mypage");
+      router.replace("/");
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "登録に失敗しました。");
     } finally {
@@ -48,12 +47,6 @@ export function SignupClient() {
         {error ? (
           <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
             {error}
-          </div>
-        ) : null}
-
-        {done ? (
-          <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[color:var(--color-foreground)]">
-            登録しました。メール確認が必要な場合は、受信箱をご確認ください。
           </div>
         ) : null}
 

@@ -7,7 +7,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export function LoginClient() {
   const router = useRouter();
-  const redirectTo = "/mypage";
+  const redirectTo = "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,6 +26,7 @@ export function LoginClient() {
       });
       if (signInError) throw signInError;
       router.replace(redirectTo);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "ログインに失敗しました。");
     } finally {

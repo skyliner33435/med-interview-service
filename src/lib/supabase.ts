@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 type AuthLike = {
   getSession: () => Promise<{ data: { session: unknown | null } }>;
@@ -24,15 +24,18 @@ export type SupabaseBrowserClientLike = {
 let browserClient: SupabaseBrowserClientLike | null = null;
 
 function createStubClient(): SupabaseBrowserClientLike {
+  const missingEnvError = new Error(
+    "Supabase env is missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY."
+  );
   const subscription = { unsubscribe: () => {} };
   return {
     auth: {
       getSession: async () => ({ data: { session: null } }),
       onAuthStateChange: () => ({ data: { subscription } }),
-      signUp: async () => ({ error: null }),
-      signInWithPassword: async () => ({ error: null }),
+      signUp: async () => ({ error: missingEnvError }),
+      signInWithPassword: async () => ({ error: missingEnvError }),
       getUser: async () => ({ data: { user: null } }),
-      signOut: async () => ({ error: null }),
+      signOut: async () => ({ error: missingEnvError }),
     },
   };
 }
@@ -49,7 +52,7 @@ export function getSupabaseBrowserClient(): SupabaseBrowserClientLike {
   }
 
   // Use a real client when env vars exist.
-  browserClient = createClient(supabaseUrl, supabaseAnonKey) as SupabaseClient;
+  browserClient = createClient(supabaseUrl, supabaseAnonKey);
   return browserClient;
 }
 
