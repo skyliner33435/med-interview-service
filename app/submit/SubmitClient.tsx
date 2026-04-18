@@ -86,7 +86,14 @@ export function SubmitClient() {
       };
 
       const { error: insertError } = await supabase.from("reports").insert(payload);
-      if (insertError) throw insertError;
+      if (insertError) {
+        const msg = insertError.message || "insert failed";
+        const hint =
+          msg.includes("row-level security") || msg.includes("permission")
+            ? "（RLS/権限設定を確認してください）"
+            : "";
+        throw new Error(`${msg}${hint ? " " + hint : ""}`);
+      }
 
       alert("投稿を受け付けました。承認後に公開されます。");
       setQa("");
@@ -94,7 +101,12 @@ export function SubmitClient() {
       setScoreDisclosure("");
       setImprovement("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "投稿に失敗しました。");
+      if (err && typeof err === "object" && "message" in err) {
+        const msg = String((err as { message?: unknown }).message ?? "");
+        setError(msg || "投稿に失敗しました。");
+      } else {
+        setError("投稿に失敗しました。");
+      }
     } finally {
       setSending(false);
     }
