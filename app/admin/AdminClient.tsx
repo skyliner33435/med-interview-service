@@ -129,6 +129,7 @@ export function AdminClient() {
       if (error) throw error;
       setReports((data ?? []) as any);
     } catch (err) {
+      console.error("[admin.loadPendingReports] failed", err);
       setReportsError(
         err instanceof Error ? err.message : "レポート取得に失敗しました。"
       );
@@ -310,6 +311,24 @@ export function AdminClient() {
                   </div>
                 </div>
               ))}
+
+            {!reportsLoading && !reportsError && reports.length === 0 ? (
+              <div className="rounded-3xl bg-[color:var(--color-card)] p-10 text-center ring-1 ring-white/10">
+                <div className="text-lg font-semibold tracking-tight">
+                  承認待ちレポートはありません
+                </div>
+                <div className="mt-2 text-sm text-[color:var(--color-muted)]">
+                  投稿がまだ無いか、RLSの設定により取得できていない可能性があります。
+                </div>
+                <button
+                  type="button"
+                  onClick={loadPendingReports}
+                  className="mt-5 inline-flex h-11 items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10"
+                >
+                  もう一度取得する
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}
