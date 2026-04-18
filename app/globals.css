@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  --background: #1a2744;
+  --foreground: #f4f1e6;
+  --card: rgba(255, 255, 255, 0.06);
+  --muted: rgba(244, 241, 230, 0.72);
+  --accent: #c9a84c;
+  --accent-2: #e6d49a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --font-sans: var(--font-sans-jp);
+  --font-serif: var(--font-serif-jp);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1a2744;
+    --foreground: #f4f1e6;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo,
+    sans-serif;
+}
