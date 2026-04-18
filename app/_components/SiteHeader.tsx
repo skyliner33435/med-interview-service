@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthCta } from "./AuthCta";
 
 const nav = [
   { href: "/reports", label: "レポート一覧" },
@@ -42,12 +43,15 @@ export function SiteHeader() {
           </Link>
         </nav>
 
-        <Link
-          href="/questions"
-          className="inline-flex h-10 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-4 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)]"
-        >
-          無料で過去質問を見る
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/questions"
+            className="hidden h-10 items-center justify-center rounded-full border border-white/15 bg-white/5 px-4 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10 md:inline-flex"
+          >
+            過去質問（無料）
+          </Link>
+          <AuthCta />
+        </div>
       </div>
     </header>
   );
