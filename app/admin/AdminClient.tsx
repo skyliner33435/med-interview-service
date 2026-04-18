@@ -119,6 +119,9 @@ export function AdminClient() {
     setReportsLoading(true);
     try {
       const supabase = getSupabaseBrowserClient();
+      console.log("[admin.loadPendingReports] start", {
+        adminEmail: user?.email ?? null,
+      });
       const { data, error } = await supabase
         .from("reports")
         .select(
@@ -126,8 +129,24 @@ export function AdminClient() {
         )
         .eq("status", "pending")
         .order("created_at", { ascending: false });
+      console.log("[admin.loadPendingReports] result", {
+        error,
+        count: Array.isArray(data) ? data.length : null,
+        sample: Array.isArray(data) ? data[0] : null,
+      });
       if (error) throw error;
       setReports((data ?? []) as any);
+
+      // If it's empty, also check total visible rows (helps diagnose RLS returning empty sets).
+      if ((data ?? []).length === 0) {
+        const { count, error: countError } = await supabase
+          .from("reports")
+          .select("id", { count: "exact", head: true });
+        console.log("[admin.loadPendingReports] visible_total_count", {
+          count,
+          countError,
+        });
+      }
     } catch (err) {
       console.error("[admin.loadPendingReports] failed", err);
       setReportsError(
