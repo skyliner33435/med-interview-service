@@ -8,15 +8,6 @@ export default function Home() {
       <SiteHeader />
 
       <main>
-        <div className="mx-auto max-w-6xl px-6 py-10 text-center text-white md:py-14">
-          <p className="text-xl font-semibold leading-relaxed md:text-2xl">
-            筆記は通った。でも、面接で落とされた。
-          </p>
-          <p className="mt-4 text-sm leading-relaxed text-white md:text-base">
-            合格最低点を超えていたのに、なぜ落ちたのか。その答えが、ここにある。
-          </p>
-        </div>
-
         <section className="relative overflow-hidden">
           <div
             className="pointer-events-none absolute inset-0 opacity-70"
@@ -34,16 +25,19 @@ export default function Home() {
               </div>
 
               <h1 className="mt-6 text-4xl font-semibold leading-[1.15] tracking-tight md:text-5xl">
-                面接で落ちた理由を、
-                <span className="block font-[family:var(--font-serif)] text-[color:var(--color-accent)]">
-                  再現可能な対策
-                </span>
-                に変える。
+                「筆記は通る。でも面接で落とされる人が、毎年必ずいる。」
               </h1>
 
+              <p className="mt-4 max-w-xl text-lg font-medium leading-relaxed tracking-tight text-[color:var(--color-foreground)] md:text-xl">
+                「あなたが、その1人にならないために。」
+              </p>
+
               <p className="mt-5 max-w-xl text-base leading-7 text-[color:var(--color-muted)] md:text-lg">
-                「何を聞かれて、どう答えて、どこで評価が落ちたのか」——
-                受験者の実例を大学別に整理。過去質問は無料で公開、レポートは必要な大学だけ購入できます。
+                「医学部の面接で落ちた受験生の実例を大学別に収録。
+                <br />
+                どんな回答が不合格に繋がったのかを事前に知ることで、
+                <br />
+                同じ失敗を避けられます。」
               </p>
 
               <section className="mt-8 max-w-xl text-left">
