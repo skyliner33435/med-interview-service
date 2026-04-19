@@ -46,6 +46,31 @@ export default function Home() {
                 受験者の実例を大学別に整理。過去質問は無料で公開、レポートは必要な大学だけ購入できます。
               </p>
 
+              <section className="mt-8 max-w-xl text-left">
+                <div className="text-sm font-semibold tracking-tight">
+                  創設者の声
+                </div>
+                <div className="mt-3 rounded-3xl bg-[color:var(--color-card)] p-6 ring-1 ring-white/10">
+                  <blockquote className="relative">
+                    <div className="pointer-events-none absolute -left-1 -top-5 select-none font-[family:var(--font-serif)] text-6xl leading-none text-[color:var(--color-accent)]/35">
+                      “
+                    </div>
+                    <p className="text-sm font-semibold leading-7 tracking-tight md:text-base">
+                      私は合格最低点より130点高く取りました。
+                      <br />
+                      それでも、面接で落とされました。
+                    </p>
+                    <p className="mt-4 text-sm leading-7 text-[color:var(--color-muted)] md:text-base">
+                      筆記試験は完璧だった。でも結果は不合格。
+                      <br />
+                      理由は教えてもらえない。何が悪かったのかもわからない。
+                      <br />
+                      同じ思いをする受験生をなくしたくて、このサービスを作りました。
+                    </p>
+                  </blockquote>
+                </div>
+              </section>
+
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <Link
                   href="/reports"
