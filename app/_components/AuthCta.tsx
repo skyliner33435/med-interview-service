@@ -39,7 +39,7 @@ export function AuthCta() {
     return (
       <Link
         href="/signup"
-        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-3 text-xs font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)] sm:h-10 sm:px-4 sm:text-sm"
+        className="hidden h-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-3 text-xs font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)] sm:h-10 sm:px-4 sm:text-sm md:inline-flex"
       >
         無料登録
       </Link>
