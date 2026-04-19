@@ -24,11 +24,11 @@ export default function Home() {
                 大学別に買える 面接「落ちレポート」
               </div>
 
-              <h1 className="mt-6 text-4xl font-semibold leading-[1.15] tracking-tight md:text-5xl">
+              <h1 className="mt-6 text-xl sm:text-2xl md:text-4xl font-semibold leading-snug tracking-tight">
                 「筆記は通る。でも面接で落とされる人が、毎年必ずいる。」
               </h1>
 
-              <p className="mt-4 max-w-xl text-lg font-medium leading-relaxed tracking-tight text-[color:var(--color-foreground)] md:text-xl">
+              <p className="mt-4 max-w-xl whitespace-nowrap text-base font-medium leading-tight tracking-tight text-[color:var(--color-foreground)] md:text-xl">
                 「あなたが、その1人にならないために。」
               </p>
 
