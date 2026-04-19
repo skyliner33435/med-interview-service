@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-import type { User } from "@supabase/supabase-js";
+import type { Session, User } from "@supabase/supabase-js";
+import { isAdminEmail } from "@/app/lib/adminConfig";
+import { ALL_UNIVERSITIES_ENTITLEMENT } from "@/app/lib/entitlements";
 import {
   seedUniversities,
   seedUsers,
@@ -14,13 +16,7 @@ import {
 type TabKey = "reports" | "universities" | "users";
 
 function isAdmin(user: User | null) {
-  // TEMP (client-side only):
-  // Lock down admin access to a single email until server-side protection is added.
-  const allow = ["skyliner33435@gmail.com"];
-
-  if (!user) return false;
-  if (user.email && allow.includes(user.email)) return true;
-  return false;
+  return isAdminEmail(user?.email ?? null);
 }
 
 function Pill({ children }: { children: React.ReactNode }) {
@@ -56,6 +52,28 @@ function TabButton({
   );
 }
 
+function StatusBadge({ status }: { status: string }) {
+  const label =
+    status === "pending"
+      ? "承認待ち"
+      : status === "approved"
+        ? "承認済み"
+        : status === "rejected"
+          ? "差し戻し"
+          : status === "published"
+            ? "公開済み（旧）"
+            : status;
+  const className =
+    status === "pending"
+      ? "rounded-full bg-[color:var(--color-accent)]/15 px-3 py-1 font-semibold text-[color:var(--color-accent)] ring-1 ring-[color:var(--color-accent)]/25"
+      : status === "approved" || status === "published"
+        ? "rounded-full bg-emerald-500/15 px-3 py-1 font-semibold text-emerald-200 ring-1 ring-emerald-500/25"
+        : status === "rejected"
+          ? "rounded-full bg-white/5 px-3 py-1 font-semibold text-[color:var(--color-muted)] ring-1 ring-white/10"
+          : "rounded-full bg-white/5 px-3 py-1 font-semibold text-[color:var(--color-foreground)] ring-1 ring-white/10";
+  return <span className={className}>{label}</span>;
+}
+
 export function AdminClient() {
   const router = useRouter();
 
@@ -73,30 +91,49 @@ export function AdminClient() {
       atmosphere: string | null;
       score: string | null;
       improvement: string | null;
-      status: "pending" | "published" | "rejected";
+      status: "pending" | "approved" | "rejected" | "published";
       submitted_by: string | null;
+      admin_comment: string | null;
+      image_url: string | null;
     }[]
   >([]);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [reportsLoading, setReportsLoading] = useState(false);
   const [reportsError, setReportsError] = useState<string | null>(null);
+  const [reportActionId, setReportActionId] = useState<string | null>(null);
+  const [sendbackForId, setSendbackForId] = useState<string | null>(null);
+  const [sendbackDraft, setSendbackDraft] = useState("");
+  const [reportsFeedback, setReportsFeedback] = useState<{
+    variant: "success" | "error";
+    text: string;
+  } | null>(null);
   const [universities, setUniversities] =
     useState<AdminUniversity[]>(seedUniversities);
   const [users] = useState<AdminUser[]>(seedUsers);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
+    let cancelled = false;
 
-    supabase.auth.getUser().then(({ data }) => {
-      setUser((data.user as User | null) ?? null);
+    // getUser / getSession を多重に叩かない（auth ロック競合を避ける）。
+    // 同一 SPA 内でログイン後に遷移してきた場合も getSession で十分。
+    void supabase.auth.getSession().then((res) => {
+      if (cancelled) return;
+      const session = (res as { data: { session: Session | null } }).data
+        .session;
+      setUser((session?.user as User | null) ?? null);
       setBooting(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser((data.user as User | null) ?? null);
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      const s = session as Session | null;
+      setUser((s?.user as User | null) ?? null);
+      setBooting(false);
     });
 
     return () => {
+      cancelled = true;
       sub.subscription.unsubscribe();
     };
   }, []);
@@ -114,54 +151,344 @@ export function AdminClient() {
     }
   }, [allowed, booting, router, user]);
 
-  async function loadPendingReports() {
+  async function loadReports(opts?: { silent?: boolean }) {
+    const silent = Boolean(opts?.silent);
     setReportsError(null);
-    setReportsLoading(true);
+    if (!silent) setReportsLoading(true);
     try {
       const supabase = getSupabaseBrowserClient();
-      console.log("[admin.loadPendingReports] start", {
+
+      console.log("[admin.reports] load start", {
         adminEmail: user?.email ?? null,
+        adminUid: user?.id ?? null,
       });
+
       const { data, error } = await supabase
         .from("reports")
-        .select(
-          "id, created_at, university_name, year, format, atmosphere, score, improvement, status, submitted_by"
-        )
-        .eq("status", "pending")
+        .select("*")
         .order("created_at", { ascending: false });
-      console.log("[admin.loadPendingReports] result", {
-        error,
-        count: Array.isArray(data) ? data.length : null,
-        sample: Array.isArray(data) ? data[0] : null,
-      });
-      if (error) throw error;
-      setReports((data ?? []) as any);
 
-      // If it's empty, also check total visible rows (helps diagnose RLS returning empty sets).
-      if ((data ?? []).length === 0) {
-        const { count, error: countError } = await supabase
-          .from("reports")
-          .select("id", { count: "exact", head: true });
-        console.log("[admin.loadPendingReports] visible_total_count", {
-          count,
-          countError,
+      if (error) {
+        const errObj = error as unknown as Record<string, unknown>;
+        console.error("[admin.reports] select error (full)", {
+          message: error.message,
+          code: errObj.code,
+          details: errObj.details,
+          hint: errObj.hint,
+          raw: JSON.stringify(error, Object.getOwnPropertyNames(error)),
         });
+        throw error;
       }
+
+      let rows = data ?? [];
+
+      if (rows.length === 0 && user?.id) {
+        const seedPayload = {
+          university_name: "（自動シード）テスト大学",
+          year: new Date().getFullYear(),
+          format: "個人面接" as const,
+          content: "管理画面初回表示時に 0 件だったため自動投入したテスト行です。",
+          atmosphere: "落ち着いて説明を聞いてもらえました。",
+          score: null as string | null,
+          improvement: null as string | null,
+          status: "pending" as const,
+          submitted_by: user.id,
+          image_url: null as string | null,
+        };
+        const { error: seedError } = await supabase
+          .from("reports")
+          .insert(seedPayload);
+        if (seedError) {
+          console.warn("[admin.reports] auto-seed insert skipped", {
+            message: seedError.message,
+            code: (seedError as { code?: string }).code,
+            details: (seedError as { details?: string }).details,
+            hint: (seedError as { hint?: string }).hint,
+          });
+        } else {
+          console.log("[admin.reports] auto-seed: inserted 1 test row");
+          const { data: again, error: againError } = await supabase
+            .from("reports")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (againError) {
+            console.warn("[admin.reports] refetch after seed failed", againError);
+          } else {
+            rows = again ?? [];
+          }
+        }
+      }
+
+      console.log("[admin.reports] select success", {
+        rowCount: rows.length,
+        firstRowKeys: rows[0] ? Object.keys(rows[0] as object) : [],
+        firstRowSample: rows[0] ?? null,
+        allRows: rows,
+      });
+
+      if (rows.length === 0) {
+        console.warn(
+          "[admin.reports] 0 rows — テーブルが空か、RLS で参照できないか、自動シードの INSERT が拒否されています。supabase/sql/reports_rls_and_seed.sql を確認してください。"
+        );
+      }
+
+      setReports(rows as typeof reports);
     } catch (err) {
-      console.error("[admin.loadPendingReports] failed", err);
+      console.error("[admin.reports] failed (catch)", err);
       setReportsError(
         err instanceof Error ? err.message : "レポート取得に失敗しました。"
       );
     } finally {
-      setReportsLoading(false);
+      if (!silent) setReportsLoading(false);
+    }
+  }
+
+  async function notifyReportEmail(
+    reportId: string,
+    kind: "approved" | "sendback",
+    comment?: string
+  ): Promise<{ ok: boolean; message?: string; skippedReason?: string }> {
+    const supabase = getSupabaseBrowserClient();
+    const { data: sessionData } = (await supabase.auth.getSession()) as {
+      data: { session: Session | null };
+    };
+    const token = sessionData.session?.access_token;
+    if (!token) {
+      return { ok: false, message: "セッションが無いため通知メールを送れません。" };
+    }
+    console.log("[notifyReportEmail] calling /api/admin/send-report-notification", {
+      reportId,
+      kind,
+    });
+    let res: Response;
+    try {
+      res = await fetch("/api/admin/send-report-notification", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          reportId,
+          kind,
+          ...(kind === "sendback" && comment ? { comment } : {}),
+        }),
+      });
+    } catch (e) {
+      return {
+        ok: false,
+        message: e instanceof Error ? e.message : "通知メール送信に失敗しました。",
+      };
+    }
+    let j: Record<string, unknown> = {};
+    try {
+      j = (await res.json()) as Record<string, unknown>;
+    } catch {
+      /* ignore */
+    }
+    if (!res.ok) {
+      console.warn("[notifyReportEmail] HTTP error", {
+        status: res.status,
+        body: j,
+      });
+      if (j.skipped === true && typeof j.error === "string") {
+        return { ok: true, skippedReason: j.error };
+      }
+      return {
+        ok: false,
+        message: typeof j.error === "string" ? j.error : res.statusText,
+      };
+    }
+    if (j.skipped === true) {
+      console.warn("[notifyReportEmail] skipped", j);
+      return {
+        ok: true,
+        skippedReason:
+          typeof j.reason === "string" ? j.reason : "通知をスキップしました。",
+      };
+    }
+    if (j.resendEmailId) {
+      console.log("[notifyReportEmail] Resend queued", {
+        resendEmailId: j.resendEmailId,
+        from: j.from,
+      });
+    }
+    return { ok: true };
+  }
+
+  async function updateReportStatus(reportId: string) {
+    setReportsFeedback(null);
+    setReportActionId(reportId);
+    try {
+      const supabase = getSupabaseBrowserClient();
+
+      // 画面 state は古いことがあるため、必ず DB から投稿者を取得する
+      const { data: metaRow, error: metaErr } = await supabase
+        .from("reports")
+        .select("submitted_by")
+        .eq("id", reportId)
+        .maybeSingle();
+
+      if (metaErr) {
+        setReportsFeedback({
+          variant: "error",
+          text: metaErr.message || "レポート情報の取得に失敗しました。",
+        });
+        return;
+      }
+
+      const rawSubmitter = (metaRow as { submitted_by?: unknown } | null)
+        ?.submitted_by;
+      const submitterId =
+        rawSubmitter !== null &&
+        rawSubmitter !== undefined &&
+        String(rawSubmitter).trim() !== ""
+          ? String(rawSubmitter).trim()
+          : null;
+
+      console.log("[admin.approve] before status update", {
+        reportId,
+        submitterId,
+        metaRow,
+      });
+
+      const { error } = await supabase
+        .from("reports")
+        .update({ status: "approved" })
+        .eq("id", reportId);
+
+      if (error) {
+        setReportsFeedback({
+          variant: "error",
+          text: error.message || "更新に失敗しました。",
+        });
+        return;
+      }
+
+      if (submitterId) {
+        const { error: entError } = await supabase
+          .from("university_report_entitlements")
+          .upsert(
+            {
+              user_id: submitterId,
+              university_name: ALL_UNIVERSITIES_ENTITLEMENT,
+            },
+            { onConflict: "user_id,university_name" }
+          );
+
+        console.log("[admin.approve] entitlement upsert", {
+          submitterId,
+          university_name: ALL_UNIVERSITIES_ENTITLEMENT,
+          entError,
+        });
+
+        if (entError) {
+          setReportsFeedback({
+            variant: "error",
+            text: `レポートは承認しましたが、投稿者への全大学閲覧権の付与に失敗しました: ${entError.message}`,
+          });
+          await loadReports({ silent: true });
+          return;
+        }
+      }
+
+      const mail = await notifyReportEmail(reportId, "approved");
+      let mailSuffix = "";
+      if (!mail.ok) {
+        mailSuffix = ` ${mail.message ?? "通知メール送信に失敗しました。"}`;
+      } else if (mail.skippedReason) {
+        mailSuffix = `（${mail.skippedReason}）`;
+      }
+
+      if (!submitterId) {
+        setReportsFeedback({
+          variant: "success",
+          text: `承認しました（submitted_by が空のため閲覧権は付与していません）。一覧を更新しました。${mailSuffix}`.trim(),
+        });
+      } else {
+        setReportsFeedback({
+          variant: "success",
+          text: `承認しました。投稿者に全大学の閲覧権を付与しました。一覧を更新しました。${mailSuffix}`.trim(),
+        });
+      }
+      await loadReports({ silent: true });
+    } catch (e) {
+      setReportsFeedback({
+        variant: "error",
+        text:
+          e instanceof Error ? e.message : "更新処理中にエラーが発生しました。",
+      });
+    } finally {
+      setReportActionId(null);
+    }
+  }
+
+  async function submitSendback(reportId: string) {
+    const text = sendbackDraft.trim();
+    if (!text) {
+      setReportsFeedback({
+        variant: "error",
+        text: "差し戻しのコメントを入力してください。",
+      });
+      return;
+    }
+    setReportsFeedback(null);
+    setReportActionId(reportId);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error } = await supabase
+        .from("reports")
+        .update({ status: "rejected", admin_comment: text })
+        .eq("id", reportId);
+
+      if (error) {
+        setReportsFeedback({
+          variant: "error",
+          text: error.message || "差し戻しの更新に失敗しました。",
+        });
+        return;
+      }
+
+      const mail = await notifyReportEmail(reportId, "sendback", text);
+      let mailSuffix = "";
+      if (!mail.ok) {
+        mailSuffix = ` ${mail.message ?? "通知メール送信に失敗しました。"}`;
+      } else if (mail.skippedReason) {
+        mailSuffix = `（${mail.skippedReason}）`;
+      }
+
+      setReportsFeedback({
+        variant: "success",
+        text: `差し戻しました。ステータスとコメントを保存しました。${mailSuffix}`.trim(),
+      });
+      setSendbackForId(null);
+      setSendbackDraft("");
+      await loadReports({ silent: true });
+    } catch (e) {
+      setReportsFeedback({
+        variant: "error",
+        text:
+          e instanceof Error ? e.message : "差し戻し処理中にエラーが発生しました。",
+      });
+    } finally {
+      setReportActionId(null);
     }
   }
 
   useEffect(() => {
     if (booting || !user || !allowed) return;
-    loadPendingReports();
+    loadReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booting, user?.id, allowed]);
+
+  useEffect(() => {
+    if (!previewImageUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreviewImageUrl(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewImageUrl]);
 
   if (booting) {
     return (
@@ -207,7 +534,7 @@ export function AdminClient() {
           </div>
           <div className="flex flex-wrap gap-2">
             <TabButton active={tab === "reports"} onClick={() => setTab("reports")}>
-              レポート承認
+              レポート
             </TabButton>
             <TabButton
               active={tab === "universities"}
@@ -229,10 +556,13 @@ export function AdminClient() {
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <div className="text-lg font-semibold tracking-tight">
-                    承認待ちレポート
+                    レポート一覧
                   </div>
                   <div className="mt-2 text-sm text-[color:var(--color-muted)]">
-                    status が pending のものだけを表示しています。
+                    Supabase の <code className="text-[color:var(--color-foreground)]">reports</code>{" "}
+                    テーブルから全件取得しています。コンソールに{" "}
+                    <code className="text-[color:var(--color-foreground)]">[admin.reports] fetched</code>{" "}
+                    が出ればレスポンス確認できます。
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -241,7 +571,7 @@ export function AdminClient() {
                   </div>
                   <button
                     type="button"
-                    onClick={loadPendingReports}
+                    onClick={() => void loadReports()}
                     disabled={reportsLoading}
                     className="inline-flex h-10 items-center justify-center rounded-full border border-white/15 bg-white/5 px-4 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10 disabled:opacity-60"
                   >
@@ -252,6 +582,18 @@ export function AdminClient() {
               {reportsError ? (
                 <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
                   {reportsError}
+                </div>
+              ) : null}
+              {reportsFeedback ? (
+                <div
+                  className={[
+                    "mt-4 rounded-2xl px-4 py-3 text-sm ring-1",
+                    reportsFeedback.variant === "success"
+                      ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-50 ring-emerald-500/20"
+                      : "border border-red-500/30 bg-red-500/10 text-red-100 ring-red-500/20",
+                  ].join(" ")}
+                >
+                  {reportsFeedback.text}
                 </div>
               ) : null}
             </div>
@@ -269,9 +611,7 @@ export function AdminClient() {
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-[color:var(--color-muted)]">
                         <Pill>{r.format}</Pill>
                         <Pill>投稿日 {new Date(r.created_at).toLocaleString()}</Pill>
-                        <span className="rounded-full bg-[color:var(--color-accent)]/15 px-3 py-1 font-semibold text-[color:var(--color-accent)] ring-1 ring-[color:var(--color-accent)]/25">
-                          承認待ち
-                        </span>
+                        <StatusBadge status={r.status} />
                       </div>
 
                       <div className="mt-4 text-sm leading-7 text-[color:var(--color-foreground)]">
@@ -287,61 +627,124 @@ export function AdminClient() {
                           改善点: {r.improvement}
                         </div>
                       ) : null}
+                      {r.status === "rejected" && r.admin_comment ? (
+                        <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-[color:var(--color-foreground)]">
+                          <span className="font-semibold text-[color:var(--color-muted)]">
+                            差し戻しコメント:{" "}
+                          </span>
+                          {r.admin_comment}
+                        </div>
+                      ) : null}
+                      {r.image_url ? (
+                        <div className="mt-4">
+                          <div className="text-xs font-semibold text-[color:var(--color-muted)]">
+                            添付画像
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPreviewImageUrl(r.image_url ?? null)
+                            }
+                            className="group mt-2 block overflow-hidden rounded-2xl border border-white/10 ring-1 ring-white/10 transition hover:border-[color:var(--color-accent)]/40 hover:ring-[color:var(--color-accent)]/25"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={r.image_url}
+                              alt=""
+                              className="max-h-48 w-full bg-black/20 object-contain transition group-hover:opacity-95"
+                            />
+                          </button>
+                          <div className="mt-1 text-xs text-[color:var(--color-muted)]">
+                            クリックで拡大表示
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="flex shrink-0 flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const supabase = getSupabaseBrowserClient();
-                          const { error } = await supabase
-                            .from("reports")
-                            .update({ status: "published" })
-                            .eq("id", r.id);
-                          if (error) {
-                            alert(error.message);
-                            return;
-                          }
-                          setReports((xs) => xs.filter((x) => x.id !== r.id));
-                        }}
-                        className="inline-flex h-11 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-5 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)]"
-                      >
-                        承認
-                      </button>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const supabase = getSupabaseBrowserClient();
-                          const { error } = await supabase
-                            .from("reports")
-                            .update({ status: "rejected" })
-                            .eq("id", r.id);
-                          if (error) {
-                            alert(error.message);
-                            return;
-                          }
-                          setReports((xs) => xs.filter((x) => x.id !== r.id));
-                        }}
-                        className="inline-flex h-11 items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10"
-                      >
-                        却下
-                      </button>
+                      {r.status === "pending" ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={
+                              reportActionId !== null || sendbackForId !== null
+                            }
+                            onClick={() => void updateReportStatus(r.id)}
+                            className="inline-flex h-11 min-w-[8.5rem] items-center justify-center rounded-full bg-[color:var(--color-accent)] px-5 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)] disabled:opacity-60"
+                          >
+                            {reportActionId === r.id ? "処理中..." : "承認"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              reportActionId !== null || sendbackForId !== null
+                            }
+                            onClick={() => {
+                              setReportsFeedback(null);
+                              setSendbackForId(r.id);
+                              setSendbackDraft("");
+                            }}
+                            className="inline-flex h-11 min-w-[8.5rem] items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10 disabled:opacity-60"
+                          >
+                            差し戻し
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </div>
+
+                  {sendbackForId === r.id ? (
+                    <div className="mt-5 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 ring-1 ring-amber-500/15">
+                      <div className="text-sm font-semibold text-[color:var(--color-foreground)]">
+                        差し戻しコメント
+                      </div>
+                      <p className="mt-1 text-xs text-[color:var(--color-muted)]">
+                        投稿者にメールで送信されます。必須です。
+                      </p>
+                      <textarea
+                        value={sendbackDraft}
+                        onChange={(e) => setSendbackDraft(e.target.value)}
+                        rows={4}
+                        className="mt-3 w-full resize-y rounded-2xl border border-white/15 bg-[color:var(--color-background)] px-4 py-3 text-sm text-[color:var(--color-foreground)] outline-none ring-0 placeholder:text-[color:var(--color-muted)] focus:border-[color:var(--color-accent)]/50"
+                        placeholder="差し戻しの理由を具体的に書いてください。"
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={reportActionId !== null}
+                          onClick={() => void submitSendback(r.id)}
+                          className="inline-flex h-10 items-center justify-center rounded-full bg-amber-200/90 px-5 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-amber-100 disabled:opacity-60"
+                        >
+                          {reportActionId === r.id ? "送信中…" : "送信"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reportActionId !== null}
+                          onClick={() => {
+                            setSendbackForId(null);
+                            setSendbackDraft("");
+                          }}
+                          className="inline-flex h-10 items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10 disabled:opacity-60"
+                        >
+                          キャンセル
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ))}
 
             {!reportsLoading && !reportsError && reports.length === 0 ? (
               <div className="rounded-3xl bg-[color:var(--color-card)] p-10 text-center ring-1 ring-white/10">
                 <div className="text-lg font-semibold tracking-tight">
-                  承認待ちレポートはありません
+                  レポートはありません
                 </div>
                 <div className="mt-2 text-sm text-[color:var(--color-muted)]">
                   投稿がまだ無いか、RLSの設定により取得できていない可能性があります。
                 </div>
                 <button
                   type="button"
-                  onClick={loadPendingReports}
+                  onClick={() => void loadReports()}
                   className="mt-5 inline-flex h-11 items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10"
                 >
                   もう一度取得する
@@ -407,6 +810,22 @@ export function AdminClient() {
             </table>
           </div>
         </section>
+      ) : null}
+
+      {previewImageUrl ? (
+        <button
+          type="button"
+          aria-label="画像プレビューを閉じる"
+          className="fixed inset-0 z-[100] flex cursor-default items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          onClick={() => setPreviewImageUrl(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewImageUrl}
+            alt=""
+            className="max-h-[92vh] max-w-full rounded-xl object-contain shadow-2xl ring-1 ring-white/20"
+          />
+        </button>
       ) : null}
     </div>
   );

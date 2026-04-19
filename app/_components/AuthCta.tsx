@@ -31,7 +31,7 @@ export function AuthCta() {
 
   if (signedIn === null) {
     return (
-      <div className="h-10 w-[108px] rounded-full bg-white/5 ring-1 ring-white/10" />
+      <div className="h-9 w-[92px] shrink-0 rounded-full bg-white/5 ring-1 ring-white/10 sm:h-10 sm:w-[108px]" />
     );
   }
 
@@ -39,7 +39,7 @@ export function AuthCta() {
     return (
       <Link
         href="/signup"
-        className="inline-flex h-10 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-4 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)]"
+        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-3 text-xs font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)] sm:h-10 sm:px-4 sm:text-sm"
       >
         無料登録
       </Link>
@@ -47,10 +47,10 @@ export function AuthCta() {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
       <Link
         href="/mypage"
-        className="inline-flex h-10 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-4 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)]"
+        className="inline-flex h-9 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-3 text-xs font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)] sm:h-10 sm:px-4 sm:text-sm"
       >
         マイページ
       </Link>
@@ -63,7 +63,7 @@ export function AuthCta() {
           router.replace("/");
           router.refresh();
         }}
-        className="inline-flex h-10 items-center justify-center rounded-full border border-white/15 bg-white/5 px-4 text-sm font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10"
+        className="inline-flex h-9 items-center justify-center rounded-full border border-white/15 bg-white/5 px-3 text-xs font-semibold tracking-tight text-[color:var(--color-foreground)] transition hover:bg-white/10 sm:h-10 sm:px-4 sm:text-sm"
       >
         ログアウト
       </button>

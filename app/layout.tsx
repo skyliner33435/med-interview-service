@@ -17,9 +17,9 @@ const notoSerifJp = Noto_Serif_JP({
 });
 
 export const metadata: Metadata = {
-  title: "医学部面接レポート - 面接対策サービス",
+  title: "Medhack",
   description:
-    "医学部面接に特化した「落ちレポート」「過去質問」「投稿」と、大学別の購入で必要な情報だけ手に入る面接対策サービス。",
+    "Medhack は医学部面接に特化した「落ちレポート」「過去質問」「投稿」と、大学別の購入で必要な情報だけ手に入る面接対策サービス。",
 };
 
 export default function RootLayout({

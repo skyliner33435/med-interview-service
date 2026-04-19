@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { ALL_UNIVERSITIES_ENTITLEMENT } from "@/app/lib/entitlements";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 import type { InterviewFailReport, UnivType } from "../lib/sampleData";
 
 type Region = InterviewFailReport["region"];
@@ -57,6 +61,52 @@ function buildUniversityCards(reports: InterviewFailReport[]): UniversityCardMod
 }
 
 export function ReportsClient({ reports }: { reports: InterviewFailReport[] }) {
+  const [entitledUniversities, setEntitledUniversities] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [entitlementsBoot, setEntitlementsBoot] = useState(true);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    let cancelled = false;
+
+    void (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData.session?.user as User | null;
+      if (!user) {
+        if (!cancelled) {
+          setEntitledUniversities(new Set());
+          setEntitlementsBoot(false);
+        }
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("university_report_entitlements")
+        .select("university_name");
+
+      if (error) {
+        console.warn("[reports] entitlements fetch skipped", error.message);
+        if (!cancelled) {
+          setEntitledUniversities(new Set());
+          setEntitlementsBoot(false);
+        }
+        return;
+      }
+
+      const rows = (data ?? []) as { university_name: string }[];
+      const names = new Set<string>(rows.map((row) => row.university_name));
+      if (!cancelled) {
+        setEntitledUniversities(names);
+        setEntitlementsBoot(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const allCards = useMemo(() => buildUniversityCards(reports), [reports]);
 
   const prefectures = useMemo(() => {
@@ -180,58 +230,111 @@ export function ReportsClient({ reports }: { reports: InterviewFailReport[] }) {
         </div>
       </div>
 
+      {!entitlementsBoot && entitledUniversities.has(ALL_UNIVERSITIES_ENTITLEMENT) ? (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50 ring-1 ring-emerald-500/20">
+          全大学のレポート閲覧権があります（承認特典または管理者付与）。すべての大学カードで詳細を表示できます。
+        </div>
+      ) : null}
+
       <div className="grid gap-5 md:grid-cols-2">
-        {visible.map((c) => (
-          <div
-            key={c.key}
-            className="rounded-3xl bg-[color:var(--color-card)] p-6 ring-1 ring-white/10"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-lg font-semibold tracking-tight">
-                  {c.university}
+        {visible.map((c) => {
+          const hasAccess =
+            entitledUniversities.has(ALL_UNIVERSITIES_ENTITLEMENT) ||
+            entitledUniversities.has(c.university);
+          const univReports = reports.filter((r) => r.university === c.university);
+          return (
+            <div
+              key={c.key}
+              className="rounded-3xl bg-[color:var(--color-card)] p-6 ring-1 ring-white/10"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold tracking-tight">
+                    {c.university}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[color:var(--color-muted)]">
+                    <span className="rounded-full bg-white/5 px-3 py-1 ring-1 ring-white/10">
+                      {c.type}
+                    </span>
+                    <span className="rounded-full bg-white/5 px-3 py-1 ring-1 ring-white/10">
+                      {c.region}
+                    </span>
+                    <span className="rounded-full bg-white/5 px-3 py-1 ring-1 ring-white/10">
+                      {c.prefecture}
+                    </span>
+                    <span className="rounded-full bg-[color:var(--color-accent)]/15 px-3 py-1 font-semibold text-[color:var(--color-accent)] ring-1 ring-[color:var(--color-accent)]/30">
+                      レポート {c.reportCount}件
+                    </span>
+                    {entitlementsBoot ? null : hasAccess ? (
+                      <span className="rounded-full bg-emerald-500/15 px-3 py-1 font-semibold text-emerald-200 ring-1 ring-emerald-500/25">
+                        {entitledUniversities.has(ALL_UNIVERSITIES_ENTITLEMENT)
+                          ? "全大学閲覧"
+                          : "閲覧権あり"}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-white/5 px-3 py-1 ring-1 ring-white/10">
+                        閲覧権なし
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[color:var(--color-muted)]">
-                  <span className="rounded-full bg-white/5 px-3 py-1 ring-1 ring-white/10">
-                    {c.type}
-                  </span>
-                  <span className="rounded-full bg-white/5 px-3 py-1 ring-1 ring-white/10">
-                    {c.region}
-                  </span>
-                  <span className="rounded-full bg-white/5 px-3 py-1 ring-1 ring-white/10">
-                    {c.prefecture}
-                  </span>
-                  <span className="rounded-full bg-[color:var(--color-accent)]/15 px-3 py-1 font-semibold text-[color:var(--color-accent)] ring-1 ring-[color:var(--color-accent)]/30">
-                    レポート {c.reportCount}件
-                  </span>
-                </div>
+
+                {hasAccess ? null : (
+                  <Link
+                    href={`/purchase?university=${encodeURIComponent(c.university)}`}
+                    className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-5 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)]"
+                  >
+                    ¥2,000 で購入
+                  </Link>
+                )}
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  alert(
-                    `（デモ）${c.university} のレポートを購入: ¥3,000\n\nStripe決済は後で実装します。`
-                  )
-                }
-                className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-5 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)]"
-              >
-                購入する
-              </button>
-            </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {c.tags.map((t) => (
+                  <span
+                    key={t}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-[color:var(--color-foreground)]"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              {c.tags.map((t) => (
-                <span
-                  key={t}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-[color:var(--color-foreground)]"
-                >
-                  {t}
-                </span>
-              ))}
+              {entitlementsBoot ? (
+                <div className="mt-4 h-16 rounded-2xl bg-white/5 ring-1 ring-white/10" />
+              ) : hasAccess ? (
+                <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+                  <div className="text-xs font-semibold tracking-tight text-[color:var(--color-muted)]">
+                    閲覧可能なレポート
+                  </div>
+                  {univReports.map((r) => (
+                    <div
+                      key={r.id}
+                      className="rounded-2xl bg-white/5 p-4 ring-1 ring-white/10"
+                    >
+                      <div className="text-sm font-semibold tracking-tight text-[color:var(--color-foreground)]">
+                        {r.title}
+                      </div>
+                      <p className="mt-2 text-sm leading-7 text-[color:var(--color-muted)]">
+                        {r.summary}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-black/15 p-4 text-sm leading-7 text-[color:var(--color-muted)]">
+                  詳細の面接レポート本文は閲覧権（1 大学 ¥2,000）購入後に表示されます。
+                  <Link
+                    href={`/purchase?university=${encodeURIComponent(c.university)}`}
+                    className="mt-2 inline-block font-semibold text-[color:var(--color-accent)] underline-offset-4 hover:underline"
+                  >
+                    購入ページへ
+                  </Link>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

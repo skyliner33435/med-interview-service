@@ -1,13 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+
+function safeNextPath(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
 
 export function LoginClient() {
   const router = useRouter();
-  const redirectTo = "/";
+  const searchParams = useSearchParams();
+  const redirectTo = useMemo(
+    () => safeNextPath(searchParams.get("next")),
+    [searchParams]
+  );
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

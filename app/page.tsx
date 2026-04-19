@@ -8,6 +8,15 @@ export default function Home() {
       <SiteHeader />
 
       <main>
+        <div className="mx-auto max-w-6xl px-6 py-10 text-center text-white md:py-14">
+          <p className="text-xl font-semibold leading-relaxed md:text-2xl">
+            筆記は通った。でも、面接で落とされた。
+          </p>
+          <p className="mt-4 text-sm leading-relaxed text-white md:text-base">
+            合格最低点を超えていたのに、なぜ落ちたのか。その答えが、ここにある。
+          </p>
+        </div>
+
         <section className="relative overflow-hidden">
           <div
             className="pointer-events-none absolute inset-0 opacity-70"
