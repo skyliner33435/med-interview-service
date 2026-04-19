@@ -1,5 +1,8 @@
 -- reports: テストデータ確認・RLS（管理者が SELECT/UPDATE できるようにする）
 -- Supabase Dashboard → SQL Editor で実行してください。
+--
+-- 公開一覧・閲覧権ベースの本文保護は reports_entitled_read_and_list_rpc.sql を
+-- 続けて実行してください（`reports_select_approved` を置き換え、一覧用 RPC を追加）。
 -- （既に同名ポリシーがある場合は DROP してから再実行）
 
 -- ---------------------------------------------------------------------------

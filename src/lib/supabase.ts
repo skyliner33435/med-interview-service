@@ -23,6 +23,8 @@ type AuthLike = {
 export type SupabaseBrowserClientLike = {
   auth: AuthLike;
   from: (table: string) => any;
+  /** PostgrestFilterBuilder を返すため戻り値は any（.then で data/error を取得） */
+  rpc: (...args: unknown[]) => any;
   /** createClient の storage。型は簡略化（アップロード等で利用） */
   storage: any;
 };
@@ -71,6 +73,7 @@ function createStubClient(): SupabaseBrowserClientLike {
       signOut: async () => ({ error: missingEnvError }),
     },
     from: () => builder,
+    rpc: async () => ({ data: null, error: missingEnvError }),
     storage: { from: storageFrom },
   };
 }
@@ -91,7 +94,7 @@ export function getSupabaseBrowserClient(): SupabaseBrowserClientLike {
     auth: {
       lock: browserAuthLock,
     },
-  }) as SupabaseBrowserClientLike;
+  }) as unknown as SupabaseBrowserClientLike;
   return browserClient;
 }
 

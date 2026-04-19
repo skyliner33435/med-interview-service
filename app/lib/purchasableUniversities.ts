@@ -33,14 +33,23 @@ export async function hasApprovedReportForUniversity(
   const name = rawName?.trim() ?? "";
   if (!name) return false;
 
-  const { count, error } = await supabase
+  const { data, error } = await supabase.rpc("count_approved_reports_for_university", {
+    p_name: name,
+  });
+
+  if (!error) {
+    const n = typeof data === "number" ? data : Number(data);
+    return Number.isFinite(n) && n > 0;
+  }
+
+  const { count, error: fallbackErr } = await supabase
     .from("reports")
     .select("id", { count: "exact", head: true })
     .eq("status", "approved")
     .eq("university_name", name);
 
-  if (error) {
-    console.error("[reports] hasApprovedReportForUniversity failed", error);
+  if (fallbackErr) {
+    console.error("[reports] hasApprovedReportForUniversity failed", error, fallbackErr);
     return false;
   }
   return (count ?? 0) > 0;

@@ -87,10 +87,7 @@ export function PurchaseClient() {
           .select("name, prefecture, region, ownership")
           .order("region")
           .order("name"),
-        supabase
-          .from("reports")
-          .select("university_name")
-          .eq("status", "approved"),
+        supabase.rpc("approved_university_names"),
       ]);
 
       if (uRes.error) {
@@ -101,12 +98,12 @@ export function PurchaseClient() {
       }
 
       if (rRes.error) {
-        console.warn("[purchase] approved reports fetch", rRes.error);
+        console.warn("[purchase] approved_university_names rpc", rRes.error);
         setApprovedUniversityNames(new Set());
       } else {
         const s = new Set<string>();
-        for (const row of (rRes.data as { university_name: string | null }[]) ??
-          []) {
+        const rows = (rRes.data as { university_name: string }[] | null) ?? [];
+        for (const row of rows) {
           const n = row.university_name?.trim();
           if (n) s.add(n);
         }
