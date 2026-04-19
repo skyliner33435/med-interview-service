@@ -694,7 +694,7 @@ export function AdminClient() {
                   </div>
 
                   {sendbackForId === r.id ? (
-                    <div className="mt-5 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4 ring-1 ring-amber-500/15">
+                    <div className="mt-5 rounded-2xl border border-[color:var(--color-accent)]/25 bg-[color:var(--color-accent)]/5 p-4 ring-1 ring-[color:var(--color-accent)]/15">
                       <div className="text-sm font-semibold text-[color:var(--color-foreground)]">
                         差し戻しコメント
                       </div>
@@ -713,7 +713,7 @@ export function AdminClient() {
                           type="button"
                           disabled={reportActionId !== null}
                           onClick={() => void submitSendback(r.id)}
-                          className="inline-flex h-10 items-center justify-center rounded-full bg-amber-200/90 px-5 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-amber-100 disabled:opacity-60"
+                          className="inline-flex h-10 items-center justify-center rounded-full bg-[color:var(--color-accent)] px-5 text-sm font-semibold tracking-tight text-[#1a2744] transition hover:bg-[color:var(--color-accent-2)] disabled:opacity-60"
                         >
                           {reportActionId === r.id ? "送信中…" : "送信"}
                         </button>

@@ -5,8 +5,8 @@
   --foreground: #f4f1e6;
   --card: rgba(255, 255, 255, 0.06);
   --muted: rgba(244, 241, 230, 0.72);
-  --accent: #c9a84c;
-  --accent-2: #e6d49a;
+  --accent: #e8d48b;
+  --accent-2: color-mix(in srgb, var(--accent) 82%, white);
 }
 
 @theme inline {
